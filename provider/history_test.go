@@ -52,9 +52,11 @@ func TestMarkWatchedSendsBulkPayload(t *testing.T) {
 	response := applyEvents(t, s,
 		at(movieEvent("h1", markWatched, map[string]string{"imdb": "tt0111161", "tmdb": "278"}), time.Date(2025, 10, 21, 12, 0, 0, 0, time.UTC)),
 		at(episodeEvent("h2", markWatched, nil, map[string]string{"imdb": "tt0903747"}, 1, 2), time.Date(2025, 10, 22, 13, 0, 0, 0, time.UTC)),
+		at(episodeEvent("h3", markWatched, map[string]string{"tmdb": "62085", "imdb": "tt0959621"}, map[string]string{"tvdb": "81189"}, 1, 1), time.Date(2025, 10, 22, 12, 0, 0, 0, time.UTC)),
 	)
-	assertStatus(t, response, "h1", statusApplied)
-	assertStatus(t, response, "h2", statusApplied)
+	for _, id := range []string{"h1", "h2", "h3"} {
+		assertStatus(t, response, id, statusApplied)
+	}
 	if len(fake.writes) != 1 {
 		t.Fatalf("writes = %v, want one bulk write", fake.writes)
 	}
@@ -62,9 +64,12 @@ func TestMarkWatchedSendsBulkPayload(t *testing.T) {
 	if path != "/sync/watched" {
 		t.Fatalf("write path = %q", path)
 	}
+	// An episode with its own TMDB or TVDB ID goes in the flat list, which
+	// MDBList matches only by those IDs; one without goes under its series.
 	assertJSONEqual(t, []byte(body), `{
 		"movies":[{"ids":{"imdb":"tt0111161","tmdb":278},"watched_at":"2025-10-21T12:00:00Z"}],
-		"episodes":[{"ids":{},"show":{"ids":{"imdb":"tt0903747"}},"season":1,"episode":2,"watched_at":"2025-10-22T13:00:00Z"}]
+		"shows":[{"ids":{"imdb":"tt0903747"},"seasons":[{"number":1,"episodes":[{"number":2,"watched_at":"2025-10-22T13:00:00Z"}]}]}],
+		"episodes":[{"ids":{"imdb":"tt0959621","tmdb":62085},"watched_at":"2025-10-22T12:00:00Z"}]
 	}`)
 }
 
@@ -142,22 +147,21 @@ func TestMarkWatchedFollowsHistoryPages(t *testing.T) {
 	}
 }
 
-func TestMarkWatchedRetriesNotFoundBatch(t *testing.T) {
+func TestMarkWatchedRejectsOnlyTheTitleMDBListCannotFind(t *testing.T) {
 	fake := &historyServer{
 		history:       `{"movies":[]}`,
-		writeResponse: `{"added":{"movies":[]},"updated":{},"not_found":{"movies":[{"ids":{"imdb":"tt-missing"}}]}}`,
+		writeResponse: `{"updated":{"movies":1},"not_found":{"movies":[{"ids":{"imdb":"tt-missing"}}],"shows":[],"seasons":[],"episodes":[]}}`,
 	}
 	s := newTestServer(t, fake.handle(t))
 	response := applyEvents(t, s,
 		at(movieEvent("h1", markWatched, map[string]string{"imdb": "tt-missing"}), time.Now()),
 		at(movieEvent("h2", markWatched, map[string]string{"imdb": "tt0111161"}), time.Now()),
 	)
-	for _, id := range []string{"h1", "h2"} {
-		result := assertStatus(t, response, id, statusRetry)
-		if result.GetFault().GetCode() != pluginv1.WatchSyncFaultCode_WATCH_SYNC_FAULT_CODE_TEMPORARY {
-			t.Fatalf("%s fault = %v", id, result.GetFault())
-		}
+	result := assertStatus(t, response, "h1", statusRejected)
+	if result.GetFault().GetCode() != pluginv1.WatchSyncFaultCode_WATCH_SYNC_FAULT_CODE_PERMANENT {
+		t.Fatalf("h1 fault = %v", result.GetFault())
 	}
+	assertStatus(t, response, "h2", statusApplied)
 }
 
 func TestMarkWatchedTreatsEmptyNotFoundBucketsAsSuccess(t *testing.T) {
@@ -272,13 +276,17 @@ func TestMarkUnwatchedRemovesTitlesWithoutWatchTimes(t *testing.T) {
 	}
 	assertJSONEqual(t, []byte(body), `{
 		"movies":[{"ids":{"imdb":"tt0111161"}}],
-		"episodes":[{"ids":{"tvdb":349232},"show":{"ids":{"tvdb":81189}},"season":1,"episode":2}]
+		"episodes":[{"ids":{"tvdb":349232}}]
 	}`)
 }
 
 func TestMarkUnwatchedTreatsNotFoundAsAlreadyUnwatched(t *testing.T) {
-	fake := &historyServer{writeResponse: `{"removed":{"movies":0},"not_found":{"movies":1}}`}
+	fake := &historyServer{writeResponse: `{"removed":{"movies":1},"not_found":{"movies":[{"ids":{"imdb":"tt0111161"}}]}}`}
 	s := newTestServer(t, fake.handle(t))
-	response := applyEvents(t, s, movieEvent("u1", markUnwatched, map[string]string{"imdb": "tt0111161"}))
+	response := applyEvents(t, s,
+		movieEvent("u1", markUnwatched, map[string]string{"imdb": "tt0111161"}),
+		movieEvent("u2", markUnwatched, map[string]string{"imdb": "tt0068646"}),
+	)
 	assertStatus(t, response, "u1", statusNoChange)
+	assertStatus(t, response, "u2", statusApplied)
 }

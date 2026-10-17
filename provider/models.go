@@ -274,15 +274,32 @@ func (u mdblistUser) accountID() string {
 }
 
 // mdblistWriteResponse is the part of a sync or watchlist write response that
-// decides its outcome. MDBList reports counts per kind and never names the
-// items it did not accept.
+// names what MDBList refused. not_found holds movies, shows, seasons, and
+// episodes buckets, each echoing the refused entries as they were sent; errors
+// lists entries MDBList could not process, such as a flat episode without a
+// TMDB or TVDB ID. History writes read both per play (see refusals); a shape
+// that names no play counts as a refusal of the whole write.
 type mdblistWriteResponse struct {
 	NotFound json.RawMessage `json:"not_found"`
 	Errors   json.RawMessage `json:"errors"`
 }
 
+// mdblistHistoryRef is one refused entry of a history write. A movie, show,
+// or flat episode carries ids; a season carries its number and show; an
+// episode written under its show carries season, number, and show. An errors
+// entry adds its type (movie, show, season, or episode). Its error text is
+// not carried into faults, which must not hold provider response bodies.
+type mdblistHistoryRef struct {
+	IDs    mdblistIDs  `json:"ids"`
+	Season int         `json:"season"`
+	Number int         `json:"number"`
+	Show   *mdblistRef `json:"show"`
+	Type   string      `json:"type"`
+}
+
 type mdblistWatchedPayload struct {
 	Movies   []mdblistWatchedMoviePayload   `json:"movies,omitempty"`
+	Shows    []mdblistWatchedShowPayload    `json:"shows,omitempty"`
 	Episodes []mdblistWatchedEpisodePayload `json:"episodes,omitempty"`
 }
 
@@ -295,12 +312,41 @@ type mdblistRef struct {
 	IDs mdblistIDs `json:"ids"`
 }
 
+// mdblistWatchedEpisodePayload is a flat episodes[] entry, which MDBList
+// matches only by the episode's own TMDB or TVDB ID.
 type mdblistWatchedEpisodePayload struct {
-	IDs       mdblistIDs  `json:"ids,omitempty"`
-	Show      *mdblistRef `json:"show,omitempty"`
-	Season    int         `json:"season"`
-	Episode   int         `json:"episode"`
-	WatchedAt string      `json:"watched_at,omitempty"`
+	IDs       mdblistIDs `json:"ids"`
+	WatchedAt string     `json:"watched_at,omitempty"`
+}
+
+// mdblistWatchedShowPayload is a shows[] entry, whose episodes MDBList
+// matches by season and episode number.
+type mdblistWatchedShowPayload struct {
+	IDs     mdblistIDs                    `json:"ids"`
+	Seasons []mdblistWatchedSeasonPayload `json:"seasons"`
+}
+
+type mdblistWatchedSeasonPayload struct {
+	Number   int                             `json:"number"`
+	Episodes []mdblistWatchedNumberedEpisode `json:"episodes"`
+}
+
+type mdblistWatchedNumberedEpisode struct {
+	Number    int    `json:"number"`
+	WatchedAt string `json:"watched_at,omitempty"`
+}
+
+// add appends one play of an episode to its season, keeping seasons in the
+// order the show's plays first name them.
+func (s *mdblistWatchedShowPayload) add(season, number int, watchedAt string) {
+	episode := mdblistWatchedNumberedEpisode{Number: number, WatchedAt: watchedAt}
+	for index := range s.Seasons {
+		if s.Seasons[index].Number == season {
+			s.Seasons[index].Episodes = append(s.Seasons[index].Episodes, episode)
+			return
+		}
+	}
+	s.Seasons = append(s.Seasons, mdblistWatchedSeasonPayload{Number: season, Episodes: []mdblistWatchedNumberedEpisode{episode}})
 }
 
 type mdblistListPayload struct {
