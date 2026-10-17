@@ -53,7 +53,7 @@ When a ratings read is imported without removals, the plugin says why, and Silo 
 
 ## Development
 
-The plugin builds against `silo-plugin-sdk` v0.21.0.
+The plugin builds against `silo-plugin-sdk` v0.27.0. It declares a batch size of 1,000, which needs a Silo server built on silo-plugin-sdk v0.27.0 or later; an older server refuses its manifest.
 
 ```bash
 make test
