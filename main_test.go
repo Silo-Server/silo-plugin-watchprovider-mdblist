@@ -72,7 +72,7 @@ func TestManifestAdvertisesBuiltInCapabilities(t *testing.T) {
 		!media[pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_EPISODE] || !media[pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_SERIES] {
 		t.Fatalf("supported media types = %v", descriptor.GetSupportedMediaTypes())
 	}
-	if descriptor.GetMaxBatchSize() != 100 {
-		t.Fatalf("max_batch_size = %d, want 100", descriptor.GetMaxBatchSize())
+	if descriptor.GetMaxBatchSize() != 1000 {
+		t.Fatalf("max_batch_size = %d, want 1000", descriptor.GetMaxBatchSize())
 	}
 }

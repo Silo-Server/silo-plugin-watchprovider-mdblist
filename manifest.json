@@ -33,7 +33,7 @@
           "WATCH_SYNC_MEDIA_TYPE_SERIES"
         ],
         "external_id_namespaces": ["imdb", "tmdb", "tvdb"],
-        "max_batch_size": 100
+        "max_batch_size": 1000
       }
     }
   ],
