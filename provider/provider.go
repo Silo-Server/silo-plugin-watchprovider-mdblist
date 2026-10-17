@@ -212,7 +212,7 @@ func (r *applyRun) apply(ctx context.Context, events []*pluginv1.WatchSyncEvent)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_MARK_WATCHED:
 		fault = r.markWatched(ctx, pending, results)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_MARK_UNWATCHED:
-		fault = r.client.markUnwatched(ctx, pending, results)
+		fault = r.markUnwatched(ctx, pending, results)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_ADD_TO_WATCHLIST:
 		fault = r.client.writeWatchlist(ctx, pending, results, false)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_REMOVE_FROM_WATCHLIST:
