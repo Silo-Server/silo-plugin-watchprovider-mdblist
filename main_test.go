@@ -46,6 +46,9 @@ func TestManifestAdvertisesBuiltInCapabilities(t *testing.T) {
 		"import_progress":          descriptor.GetImportProgress(),
 		"export_watched":           descriptor.GetExportWatched(),
 		"export_unwatched":         descriptor.GetExportUnwatched(),
+		"import_favorites":         descriptor.GetImportFavorites(),
+		"export_favorites":         descriptor.GetExportFavorites(),
+		"remove_favorites":         descriptor.GetRemoveFavorites(),
 		"import_watchlist":         descriptor.GetImportWatchlist(),
 		"export_watchlist":         descriptor.GetExportWatchlist(),
 		"remove_watchlist":         descriptor.GetRemoveWatchlist(),
@@ -59,11 +62,6 @@ func TestManifestAdvertisesBuiltInCapabilities(t *testing.T) {
 			t.Errorf("%s is not advertised", flag)
 		}
 	}
-	// MDBList exposes one list, its watchlist, so it binds to Silo's
-	// watchlist and never to favorites.
-	if descriptor.GetImportFavorites() || descriptor.GetExportFavorites() || descriptor.GetRemoveFavorites() {
-		t.Fatalf("descriptor advertises favorites: %v", descriptor)
-	}
 	media := map[pluginv1.WatchSyncMediaType]bool{}
 	for _, mediaType := range descriptor.GetSupportedMediaTypes() {
 		media[mediaType] = true
@@ -71,6 +69,14 @@ func TestManifestAdvertisesBuiltInCapabilities(t *testing.T) {
 	if len(media) != 3 || !media[pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_MOVIE] ||
 		!media[pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_EPISODE] || !media[pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_SERIES] {
 		t.Fatalf("supported media types = %v", descriptor.GetSupportedMediaTypes())
+	}
+	// Favorites create a list in the MDBList account, so they wait for the
+	// profile to turn them on.
+	settings := descriptor.GetConnectionSettings()
+	if len(settings) != 1 || settings[0].GetKey() != "sync_favorites" || settings[0].GetLabel() != "Sync favorites" ||
+		settings[0].GetType() != pluginv1.WatchSyncConnectionSettingType_WATCH_SYNC_CONNECTION_SETTING_TYPE_BOOLEAN ||
+		settings[0].GetDefaultValue().GetBoolValue() {
+		t.Fatalf("connection settings = %v, want an off-by-default sync_favorites switch", settings)
 	}
 	if descriptor.GetMaxBatchSize() != 1000 {
 		t.Fatalf("max_batch_size = %d, want 1000", descriptor.GetMaxBatchSize())

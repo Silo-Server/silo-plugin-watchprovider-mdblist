@@ -13,13 +13,16 @@
       "type": "watch_sync_provider.v1",
       "id": "mdblist",
       "display_name": "MDBList",
-      "description": "Two-way watch history, watchlist, and movie and series ratings, resume progress import, and live scrobbling for an MDBList account.",
+      "description": "Two-way watch history, watchlist, favorites, and movie and series ratings, resume progress import, and live scrobbling for an MDBList account.",
       "watch_sync_provider": {
         "auth_methods": ["WATCH_SYNC_AUTH_METHOD_API_KEY"],
         "import_watched": true,
         "import_progress": true,
         "export_watched": true,
         "export_unwatched": true,
+        "import_favorites": true,
+        "export_favorites": true,
+        "remove_favorites": true,
         "import_watchlist": true,
         "export_watchlist": true,
         "remove_watchlist": true,
@@ -33,15 +36,24 @@
           "WATCH_SYNC_MEDIA_TYPE_SERIES"
         ],
         "external_id_namespaces": ["imdb", "tmdb", "tvdb"],
-        "max_batch_size": 1000
+        "max_batch_size": 1000,
+        "connection_settings": [
+          {
+            "key": "sync_favorites",
+            "label": "Sync favorites",
+            "description": "Keep this profile's favorite movies and series in a private MDBList list named Silo Favorites. The plugin creates the list in your MDBList account the first time it sends a favorite. Turn this on for every Silo server that should share favorites.",
+            "type": "WATCH_SYNC_CONNECTION_SETTING_TYPE_BOOLEAN",
+            "default_value": false
+          }
+        ]
       }
     }
   ],
   "category": "Watch Providers",
   "presentation": {
     "display_name": "MDBList Watch Provider",
-    "summary": "Sync Silo watch history, watchlists, and ratings with MDBList.",
-    "description_markdown": "Imports and exports movie and episode watch history, imports resume progress, syncs the MDBList watchlist in its own order, syncs movie and series ratings in both directions, and forwards live playback start, pause, and stop events.",
+    "summary": "Sync Silo watch history, watchlists, favorites, and ratings with MDBList.",
+    "description_markdown": "Imports and exports movie and episode watch history, imports resume progress, syncs the MDBList watchlist in its own order, can keep movie and series favorites in a private MDBList list named Silo Favorites when Sync favorites is turned on, syncs movie and series ratings in both directions, and forwards live playback start, pause, and stop events.",
     "setup_markdown": "Each Silo profile connects with its own MDBList API key, created on the API page of your [MDBList preferences](https://mdblist.com/preferences/#api). The plugin needs no server-wide settings.\n\nMDBList's free tier allows 1,000 requests a day. The plugin paces requests to about one a second per key, and when MDBList reports the limit, Silo waits before the next sync.",
     "homepage_url": "https://mdblist.com",
     "source_url": "https://github.com/Silo-Server/silo-plugin-watchprovider-mdblist",

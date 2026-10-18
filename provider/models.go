@@ -246,12 +246,14 @@ func (i mdblistWatchlistItem) preferredIDs() mdblistIDs {
 		ids.TVDB = i.TVDBID
 	}
 	if ids.TMDB == 0 && i.ID > 0 && (i.Mediatype == "movie" || i.Mediatype == "show") {
-		// `id` on watchlist items mirrors the TMDB id for movies and shows.
+		// `id` on list items mirrors the TMDB id for movies and shows.
 		ids.TMDB = i.ID
 	}
 	return ids
 }
 
+// mdblistWatchlistResponse is a page of the watchlist, or of any other list:
+// /lists/{id}/items answers in the same shape.
 type mdblistWatchlistResponse struct {
 	Movies     []mdblistWatchlistItem `json:"movies"`
 	Shows      []mdblistWatchlistItem `json:"shows"`
@@ -352,6 +354,26 @@ func (s *mdblistWatchedShowPayload) add(season, number int, watchedAt string) {
 type mdblistListPayload struct {
 	Movies []mdblistRef `json:"movies,omitempty"`
 	Shows  []mdblistRef `json:"shows,omitempty"`
+}
+
+// mdblistStaticListPayload is a static list write. Unlike watchlist writes,
+// MDBList documents static list entries as bare IDs, without an ids wrapper.
+type mdblistStaticListPayload struct {
+	Movies []mdblistIDs `json:"movies,omitempty"`
+	Shows  []mdblistIDs `json:"shows,omitempty"`
+}
+
+// mdblistUserList is one of the account's own lists, as /lists/user returns
+// it and /lists/user/add answers a new one.
+type mdblistUserList struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Dynamic bool   `json:"dynamic"`
+}
+
+type mdblistCreateList struct {
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
 }
 
 // emptyJSONValue reports whether a not_found or errors value holds nothing:

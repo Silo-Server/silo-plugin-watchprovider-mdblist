@@ -24,6 +24,7 @@ const syncPageLimit = 1000
 const (
 	tokenKindWatched   = "watched"
 	tokenKindWatchlist = "watchlist"
+	tokenKindFavorites = "favorites"
 	tokenKindRatings   = "ratings"
 
 	invalidPageTokenMessage = "MDBList page token is invalid"
@@ -92,6 +93,9 @@ type pageToken struct {
 	Offset int    `json:"o,omitempty"`
 	Legacy bool   `json:"l,omitempty"`
 
+	// Favorites only: the ID of the list the traversal reads.
+	List int `json:"li,omitempty"`
+
 	// Ratings only: entries read so far, the largest entry total a page
 	// reported, whether the traversal claims a complete snapshot, and the
 	// hashes of every entry read so far.
@@ -120,7 +124,7 @@ func decodePageToken(raw, kind string) (pageToken, *pluginv1.WatchSyncFault) {
 	var token pageToken
 	if err := json.Unmarshal(decoded, &token); err != nil || token.Kind != kind ||
 		token.Offset < 0 || token.Read < 0 || len(token.Seen)%seenHashSize != 0 ||
-		(token.Cursor == "" && !token.Legacy) {
+		(token.Cursor == "" && !token.Legacy) || (kind == tokenKindFavorites) != (token.List > 0) {
 		return pageToken{}, invalidRequestFault(invalidPageTokenMessage)
 	}
 	return token, nil
@@ -257,13 +261,20 @@ func listWatchlist(ctx context.Context, client *apiClient, rawToken string) *plu
 	if fault != nil {
 		return listFault(fault)
 	}
+	return listTitles(ctx, client, "/watchlist/items", token, watchlistState)
+}
+
+// listTitles returns one page of a list of movies and shows, read from path.
+// mark sets the list the states belong to. Every traversal reads the whole
+// list, so it is a complete snapshot.
+func listTitles(ctx context.Context, client *apiClient, path string, token pageToken, mark func(*pluginv1.WatchSyncRemoteState)) *pluginv1.WatchSyncListRemoteStateResponse {
 	state := token.state()
 	var payload mdblistWatchlistResponse
-	if err := client.get(ctx, "/watchlist/items", state.query(nil), &payload); err != nil {
+	if err := client.get(ctx, path, state.query(nil), &payload); err != nil {
 		return listFault(faultFor(err))
 	}
 	response := &pluginv1.WatchSyncListRemoteStateResponse{
-		Items:            watchlistStates(payload),
+		Items:            titleStates(payload, mark),
 		CompleteSnapshot: true,
 	}
 	done, err := state.advance(payload.Pagination, len(payload.Movies)+len(payload.Shows))
@@ -277,29 +288,29 @@ func listWatchlist(ctx context.Context, client *apiClient, rawToken string) *plu
 	return response
 }
 
-// watchlistStates leaves listed_at unset: MDBList's watchlist reports no add
-// time, and Silo stamps the import time instead.
-func watchlistStates(payload mdblistWatchlistResponse) []*pluginv1.WatchSyncRemoteState {
+func watchlistState(state *pluginv1.WatchSyncRemoteState) {
+	state.Watchlist = &pluginv1.WatchSyncRemoteListState{}
+}
+
+// titleStates leaves listed_at unset: MDBList's lists report no add time, and
+// Silo stamps the import time instead.
+func titleStates(payload mdblistWatchlistResponse, mark func(*pluginv1.WatchSyncRemoteState)) []*pluginv1.WatchSyncRemoteState {
 	items := make([]*pluginv1.WatchSyncRemoteState, 0, len(payload.Movies)+len(payload.Shows))
+	add := func(key string, media *pluginv1.WatchSyncMedia) {
+		if key == "" {
+			return
+		}
+		state := &pluginv1.WatchSyncRemoteState{ProviderItemKey: key, Media: media}
+		mark(state)
+		items = append(items, state)
+	}
 	for _, item := range payload.Movies {
 		ids := item.preferredIDs()
-		if key := movieKey(ids); key != "" {
-			items = append(items, &pluginv1.WatchSyncRemoteState{
-				ProviderItemKey: key,
-				Media:           titleMedia(pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_MOVIE, item.Title, item.ReleaseYear, ids),
-				Watchlist:       &pluginv1.WatchSyncRemoteListState{},
-			})
-		}
+		add(movieKey(ids), titleMedia(pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_MOVIE, item.Title, item.ReleaseYear, ids))
 	}
 	for _, item := range payload.Shows {
 		ids := item.preferredIDs()
-		if key := showKey(ids); key != "" {
-			items = append(items, &pluginv1.WatchSyncRemoteState{
-				ProviderItemKey: key,
-				Media:           titleMedia(pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_SERIES, item.Title, item.ReleaseYear, ids),
-				Watchlist:       &pluginv1.WatchSyncRemoteListState{},
-			})
-		}
+		add(showKey(ids), titleMedia(pluginv1.WatchSyncMediaType_WATCH_SYNC_MEDIA_TYPE_SERIES, item.Title, item.ReleaseYear, ids))
 	}
 	return items
 }

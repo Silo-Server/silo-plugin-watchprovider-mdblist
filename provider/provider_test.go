@@ -128,7 +128,7 @@ func TestListRemoteStateRejectsUnsupportedFamilies(t *testing.T) {
 		t.Error("MDBList should not be called")
 	})
 	cases := map[string][]pluginv1.WatchSyncRemoteStateKind{
-		"favorites": {pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_FAVORITE},
+		"dropped": {pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_DROPPED},
 		"two kinds": {
 			pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_WATCHED,
 			pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_RATING,
@@ -172,10 +172,10 @@ func TestApplyEventsRejectsUnsupportedOperationsWithoutCallingMDBList(t *testing
 		t.Error("MDBList should not be called")
 	})
 	response := applyEvents(t, s,
-		movieEvent("fav", pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_ADD_FAVORITE, map[string]string{"imdb": "tt0111161"}),
+		seriesEvent("drop", pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_MARK_DROPPED, map[string]string{"tvdb": "81189"}),
 		movieEvent("", pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_MARK_WATCHED, map[string]string{"imdb": "tt0111161"}),
 	)
-	result := assertStatus(t, response, "fav", pluginv1.WatchSyncApplyStatus_WATCH_SYNC_APPLY_STATUS_REJECTED)
+	result := assertStatus(t, response, "drop", pluginv1.WatchSyncApplyStatus_WATCH_SYNC_APPLY_STATUS_REJECTED)
 	if result.GetFault().GetCode() != pluginv1.WatchSyncFaultCode_WATCH_SYNC_FAULT_CODE_INVALID_REQUEST {
 		t.Fatalf("fault = %v", result.GetFault())
 	}
