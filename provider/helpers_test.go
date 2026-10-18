@@ -64,12 +64,17 @@ func listAll(t *testing.T, s *Server, kind pluginv1.WatchSyncRemoteStateKind) tr
 
 func listAllWithKey(t *testing.T, s *Server, kind pluginv1.WatchSyncRemoteStateKind, apiKey string) traversal {
 	t.Helper()
+	return listAllWithContext(t, s, kind, authContext(apiKey))
+}
+
+func listAllWithContext(t *testing.T, s *Server, kind pluginv1.WatchSyncRemoteStateKind, auth *pluginv1.WatchSyncAuthenticatedContext) traversal {
+	t.Helper()
 	var result traversal
 	token := ""
 	seenTokens := map[string]bool{}
 	for {
 		response, err := s.ListRemoteState(context.Background(), &pluginv1.WatchSyncListRemoteStateRequest{
-			Context:    authContext(apiKey),
+			Context:    auth,
 			PageToken:  token,
 			PageSize:   100,
 			StateKinds: []pluginv1.WatchSyncRemoteStateKind{kind},
@@ -104,8 +109,13 @@ func listAllWithKey(t *testing.T, s *Server, kind pluginv1.WatchSyncRemoteStateK
 
 func applyEvents(t *testing.T, s *Server, events ...*pluginv1.WatchSyncEvent) *pluginv1.WatchSyncApplyEventsResponse {
 	t.Helper()
+	return applyEventsWithContext(t, s, authContext(testKey), events...)
+}
+
+func applyEventsWithContext(t *testing.T, s *Server, auth *pluginv1.WatchSyncAuthenticatedContext, events ...*pluginv1.WatchSyncEvent) *pluginv1.WatchSyncApplyEventsResponse {
+	t.Helper()
 	response, err := s.ApplyEvents(context.Background(), &pluginv1.WatchSyncApplyEventsRequest{
-		Context: authContext(testKey),
+		Context: auth,
 		Events:  events,
 	})
 	if err != nil {

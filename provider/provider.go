@@ -122,6 +122,8 @@ func (s *Server) ListRemoteState(ctx context.Context, req *pluginv1.WatchSyncLis
 		return s.listProgress(ctx, client, req.GetPageToken()), nil
 	case pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_WATCHLIST:
 		return listWatchlist(ctx, client, req.GetPageToken()), nil
+	case pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_FAVORITE:
+		return listFavorites(ctx, client, req.GetPageToken(), favoritesEnabled(req.GetContext())), nil
 	case pluginv1.WatchSyncRemoteStateKind_WATCH_SYNC_REMOTE_STATE_KIND_RATING:
 		return listRatings(ctx, client, req.GetPageToken()), nil
 	default:
@@ -132,9 +134,9 @@ func (s *Server) ListRemoteState(ctx context.Context, req *pluginv1.WatchSyncLis
 }
 
 // ApplyEvents applies each run of consecutive events that share an operation
-// as one group, so a batch of watched plays, watchlist items, or ratings costs
-// one MDBList write. Groups run in order, and a rate limit or the time box
-// leaves every later event for a retry.
+// as one group, so a batch of watched plays, watchlist items, favorites, or
+// ratings costs one MDBList write. Groups run in order, and a rate limit or
+// the time box leaves every later event for a retry.
 func (s *Server) ApplyEvents(ctx context.Context, req *pluginv1.WatchSyncApplyEventsRequest) (*pluginv1.WatchSyncApplyEventsResponse, error) {
 	client, fault := s.authenticatedClient(req.GetContext())
 	if fault != nil {
@@ -143,7 +145,13 @@ func (s *Server) ApplyEvents(ctx context.Context, req *pluginv1.WatchSyncApplyEv
 	budget := syncTimeBox(ctx)
 	ctx, cancel := context.WithTimeout(ctx, syncRequestLimit(ctx))
 	defer cancel()
-	run := &applyRun{server: s, client: client, startedAt: s.now(), budget: budget}
+	run := &applyRun{
+		server:           s,
+		client:           client,
+		startedAt:        s.now(),
+		budget:           budget,
+		favoritesEnabled: favoritesEnabled(req.GetContext()),
+	}
 
 	events := req.GetEvents()
 	response := &pluginv1.WatchSyncApplyEventsResponse{
@@ -188,6 +196,12 @@ type applyRun struct {
 	// stop is the fault every remaining event is answered with once a rate
 	// limit or the time box ends the call.
 	stop *pluginv1.WatchSyncFault
+	// favoritesEnabled is the connection's Sync favorites setting.
+	favoritesEnabled bool
+	// favoritesListID is the Silo Favorites list once favoritesListFound
+	// says the call has looked it up; 0 means the account has none.
+	favoritesListID    int
+	favoritesListFound bool
 }
 
 func (r *applyRun) outOfTime() bool {
@@ -217,6 +231,10 @@ func (r *applyRun) apply(ctx context.Context, events []*pluginv1.WatchSyncEvent)
 		fault = r.client.writeWatchlist(ctx, pending, results, false)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_REMOVE_FROM_WATCHLIST:
 		fault = r.client.writeWatchlist(ctx, pending, results, true)
+	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_ADD_FAVORITE:
+		fault = r.writeFavorites(ctx, pending, results, false)
+	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_REMOVE_FAVORITE:
+		fault = r.writeFavorites(ctx, pending, results, true)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_SET_RATING:
 		fault = r.client.writeRatings(ctx, pending, results, false)
 	case pluginv1.WatchSyncOperation_WATCH_SYNC_OPERATION_REMOVE_RATING:
