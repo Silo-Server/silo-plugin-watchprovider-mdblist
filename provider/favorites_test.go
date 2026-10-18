@@ -63,8 +63,6 @@ func (f *fakeLists) handler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, page)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/lists/"):
 		writeJSON(w, `{"added":{"movies":1,"shows":1},"removed":{"movies":0,"shows":0},"existing":{"movies":0,"shows":0},"not_found":{"movies":0,"shows":0}}`)
-	case r.Method == http.MethodDelete:
-		w.WriteHeader(http.StatusNoContent)
 	default:
 		f.t.Errorf("unexpected request %s", request)
 		w.WriteHeader(http.StatusNotFound)
@@ -203,6 +201,8 @@ func TestAddFavoriteCreatesAPrivateListWhenTheAccountHasNone(t *testing.T) {
 }
 
 func TestAddFavoriteUsesTheOlderListWhenAnotherServerCreatedOneAtTheSameTime(t *testing.T) {
+	// The new list (12) is left alone: a server whose lookup did not yet show
+	// list 9 may already have written to it.
 	f, s := newFakeLists(t, `[]`)
 	f.afterCreate = `[{"id":12,"name":"Silo Favorites"},{"id":9,"name":"Silo Favorites"}]`
 	response := applyFavorites(t, s, movieEvent("m1", addFavorite, map[string]string{"tmdb": "278"}))
@@ -211,7 +211,6 @@ func TestAddFavoriteUsesTheOlderListWhenAnotherServerCreatedOneAtTheSameTime(t *
 		"GET /lists/user",
 		`POST /lists/user/add {"name":"Silo Favorites","private":true}`,
 		"GET /lists/user",
-		"DELETE /lists/12",
 		`POST /lists/9/items/add {"movies":[{"tmdb":278}]}`,
 	)
 }

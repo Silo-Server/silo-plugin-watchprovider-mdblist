@@ -57,8 +57,10 @@ func (c *apiClient) findFavoritesList(ctx context.Context) (int, error) {
 // createFavoritesList creates the private Silo Favorites list and returns the
 // list every server should use. It looks the list up again after creating it:
 // another server may have created one at the same moment, and the oldest one
-// wins. A list this call created that lost is still empty, so it is deleted.
-// A refused create also looks again, in case MDBList refused a duplicate name.
+// wins. A list this call created that lost is left in place: another server
+// whose lookup did not yet show the older list may already have written to
+// it, and deleting it would destroy those favorites in MDBList. A refused
+// create also looks again, in case MDBList refused a duplicate name.
 //
 // Only a rate limit ends the call. The lookup before the create accepted the
 // API key, so a 401 or 403 here refuses the list, not the key.
@@ -86,10 +88,6 @@ func (c *apiClient) createFavoritesList(ctx context.Context) (int, *pluginv1.Wat
 		return created.ID, nil
 	case id == 0:
 		return 0, temporaryFault("MDBList did not return the new " + favoritesListName + " list")
-	case created.ID > id:
-		// Another server's list is older. Best effort: a leftover empty list
-		// does no harm.
-		_ = c.do(ctx, http.MethodDelete, "/lists/"+strconv.Itoa(created.ID), nil, nil, nil)
 	}
 	return id, nil
 }
